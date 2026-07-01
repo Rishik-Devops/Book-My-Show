@@ -4,15 +4,15 @@ pipeline {
     agent any
 
     tools {
-        jdk 'jdk17'
-        nodejs 'node23'
+        jdk 'jdk21'
+        nodejs 'node26'
     }
 
     environment {
         SCANNER_HOME = tool 'sonar-scanner'
-        DOCKER_IMAGE = 'kastrov/bms:latest'
-        EKS_CLUSTER_NAME = 'kastro-eks'
-        AWS_REGION = 'us-east-1'
+        DOCKER_IMAGE = 'rishik21/bms:latest'
+        EKS_CLUSTER_NAME = 'rishik-cluster'
+        AWS_REGION = 'ap-southeast-2'
     }
 
     stages {
@@ -24,7 +24,7 @@ pipeline {
 
         stage('Checkout from Git') {
             steps {
-                git branch: 'main', url: 'https://github.com/KastroVKiran/Book-My-Show.git'
+                git branch: 'main', url: 'https://github.com/Rishik-Devops/Book-My-Show/'
                 sh 'ls -la'  // Verify files after checkout
             }
         }
@@ -64,30 +64,26 @@ pipeline {
                 '''
             }
         }
-
-        stage('OWASP FS Scan') {
-            steps {
-                dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
-                dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
-            }
-        }
-
         stage('Trivy FS Scan') {
             steps {
                 sh 'trivy fs . > trivyfs.txt'
             }
         }
 
-        stage('Docker Build & Push') {
             steps {
                 script {
-                    withDockerRegistry(credentialsId: 'docker', toolName: 'docker') {
-                        sh ''' 
+                    withDockerRegistry(credentialsId: 'docker') {
+                        sh '''
                         echo "Building Docker image..."
-                        docker build --no-cache -t $DOCKER_IMAGE -f bookmyshow-app/Dockerfile bookmyshow-app
 
-                        echo "Pushing Docker image to Docker Hub..."
-                        docker push $DOCKER_IMAGE
+                        docker build --no-cache \
+                        -t rishik21/bms:latest \
+                        -f bookmyshow-app/Dockerfile \
+                        bookmyshow-app
+
+                        echo "Pushing Docker image..."
+
+                        docker push rishik21/bms:latest
                         '''
                     }
                 }
@@ -122,13 +118,17 @@ pipeline {
 
     post {
         always {
-            emailext attachLog: true,
-                subject: "'${currentBuild.result}'",
-                body: "Project: ${env.JOB_NAME}<br/>" +
-                      "Build Number: ${env.BUILD_NUMBER}<br/>" +
-                      "URL: ${env.BUILD_URL}<br/>",
-                to: 'kastrokiran@gmail.com',
-                attachmentsPattern: 'trivyfs.txt'
+            emailext(
+                attachLog: true,
+                subject: "${currentBuild.currentResult}: ${env.JOB_NAME}",
+                body: """
+                Project: ${env.JOB_NAME}<br/>
+                Build Number: ${env.BUILD_NUMBER}<br/>
+                Build URL: ${env.BUILD_URL}<br/>
+                """,
+                to: 'rishikteratipalli@gmail.com',
+                attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+            )
         }
     }
 }
